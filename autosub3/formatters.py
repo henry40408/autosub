@@ -22,11 +22,12 @@ def vtt_formatter(subtitles, show_before=0, show_after=0):
 
 
 def json_formatter(subtitles):
-    return json.dumps([{
+    _subtitles = [{
         'start': start,
         'end': end,
         'content': text
-    } for ((start, end), text) in subtitles])
+    } for ((start, end), text) in subtitles]
+    return json.dumps(_subtitles, ensure_ascii=False)
 
 
 def raw_formatter(subtitles):
