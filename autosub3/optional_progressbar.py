@@ -1,4 +1,6 @@
-from progressbar import ProgressBar
+from progressbar import ProgressBar, streams
+
+streams.wrap_stderr()
 
 
 class OptionalProgressBar(ProgressBar):
