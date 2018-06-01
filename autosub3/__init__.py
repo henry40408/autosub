@@ -20,6 +20,7 @@ Options:
 """
 
 import audioop
+import contextlib
 import json
 import math
 import multiprocessing
@@ -36,7 +37,7 @@ import requests
 from progressbar import Percentage, Bar, ETA
 
 from autosub3.constants import LANGUAGE_CODES, GOOGLE_SPEECH_API_KEY, GOOGLE_SPEECH_API_URL
-from autosub3.formatters import FORMATTERS
+from autosub3.formatters import FORMATTERS, BaseFormatter
 from autosub3.optional_progressbar import OptionalProgressBar
 
 DEFAULT_SUBTITLE_FORMAT = 'srt'
@@ -189,13 +190,12 @@ def main():
 
     verbose = not args['--quiet']
     try:
-        subtitle_file_path = generate_subtitles(args['<source>'],
-                                                concurrency=int(args['--concurrency']),
-                                                src_language=args['--src-language'],
-                                                subtitle_file_format=args['--format'],
-                                                output=args['--output'],
-                                                verbose=verbose)
-        print('Subtitles file created at {subtitle_file_path}'.format(subtitle_file_path=subtitle_file_path))
+        generate_subtitles(args['<source>'],
+                           concurrency=int(args['--concurrency']),
+                           src_language=args['--src-language'],
+                           subtitle_file_format=args['--format'],
+                           output=args['--output'],
+                           verbose=verbose)
     except KeyboardInterrupt:
         return 1
 
@@ -207,7 +207,7 @@ def generate_subtitles(source_path, *,
                        src_language=DEFAULT_SRC_LANGUAGE,
                        subtitle_file_format=DEFAULT_SUBTITLE_FORMAT,
                        output=None,
-                       verbose=False):
+                       verbose=False) -> str:
     audio_filename, audio_rate = extract_audio(source_path)
     regions = find_speech_regions(audio_filename)
     pool = multiprocessing.Pool(concurrency)
@@ -244,20 +244,34 @@ def generate_subtitles(source_path, *,
             raise
 
     timed_subtitles = [(r, t) for r, t in zip(regions, transcripts) if t]
-    formatter = FORMATTERS.get(subtitle_file_format)
-    formatted_subtitles = formatter(timed_subtitles)
 
-    destination = output
-    if not destination:
-        base, ext = os.path.splitext(source_path)
-        destination = '{base}.{format}'.format(base=base, format=subtitle_file_format)
+    formatter: BaseFormatter = FORMATTERS.get(subtitle_file_format)()
+    formatted_subtitles = formatter.generate(timed_subtitles)
 
-    with open(destination, 'wb') as f:
-        f.write(formatted_subtitles.encode('utf-8'))
+    with smart_open(output) as f:
+        f.write(formatted_subtitles)
 
     os.remove(audio_filename)
 
-    return destination
+    if output:
+        print('Subtitles file created at {subtitle_file_path}'.format(subtitle_file_path=output))
+
+    return formatted_subtitles
+
+
+# credit: https://stackoverflow.com/a/17603000
+@contextlib.contextmanager
+def smart_open(filename=None):
+    if filename and filename != '-':
+        fh = open(filename, 'w')
+    else:
+        fh = sys.stdout
+
+    try:
+        yield fh
+    finally:
+        if fh is not sys.stdout:
+            fh.close()
 
 
 if __name__ == '__main__':
