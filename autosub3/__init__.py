@@ -15,6 +15,7 @@ Options:
                                     name as the source path)
   -F --format=<format>              Destination subtitle format [default: srt]
   -S --src-language=<language>      Language spoken in source file [default: en]
+  --debug-audio                     Extract regions of audio file for debugging
   --list-formats                    List all available subtitle formats
   --list-languages                  List all available source languages
 """
@@ -160,9 +161,27 @@ def find_speech_regions(filename, frame_width=4096, min_region_size=0.5, max_reg
     return regions
 
 
+def output_speech_regions(source_path):
+    audio_filename, audio_rate = extract_audio(source_path)
+    converter = FLACConverter(source_path=audio_filename)
+    regions = find_speech_regions(audio_filename)
+
+    if not os.path.exists('regions'):
+        os.mkdir('regions')
+
+    for index, region in enumerate(regions):
+        region_audio = converter(region=region)
+        with open('regions/{index}.flac'.format(index=index), 'wb') as region_file:
+            region_file.write(region_audio)
+
+
 def main():
     version = open('VERSION', 'r').read()
     args = docopt.docopt(__doc__, version=version)
+
+    if args['--debug-audio']:
+        output_speech_regions(args['<source>'])
+        return 0
 
     if args['--list-formats']:
         for subtitle_format in FORMATTERS.keys():
